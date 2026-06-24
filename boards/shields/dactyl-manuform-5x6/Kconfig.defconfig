@@ -1,0 +1,17 @@
+if SHIELD_DACTYL-MANUFORM-5X6_LEFT
+
+# Name must be less than 16 characters long!
+config ZMK_KEYBOARD_NAME
+    default "dactyl-manuform-5x6"
+
+config ZMK_SPLIT_ROLE_CENTRAL
+    default y
+
+endif
+
+if SHIELD_DACTYL-MANUFORM-5X6_LEFT || SHIELD_DACTYL-MANUFORM-5X6_RIGHT
+
+config ZMK_SPLIT
+    default y
+
+endif
