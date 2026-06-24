@@ -1,0 +1,12 @@
+file_format: "1"
+id: dactyl-manuform-5x6
+name: Dactyl Manuform 5x6
+type: shield
+url: https://github.com/tshort/dactyl-keyboard
+requires:
+  - pro_micro
+features:
+  - keys
+siblings:
+  - dactyl-manuform-5x6_left
+  - dactyl-manuform-5x6_right
