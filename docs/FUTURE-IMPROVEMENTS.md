@@ -111,3 +111,62 @@ analog RGB LED on 3 GPIOs** (option 2) — zero idle, blink-only, green/yellow/r
 no extra FET, directly supported by the widget. For the absolute lowest power /
 fewest pins, a **single discrete LED with blink-count patterns** (option 1).
 Reserve the WS2812B/SK6812 path only if a power-gate FET is added.
+
+### Chosen plan: single green discrete LED (option 1)
+
+Concrete decisions for when this gets built. Battery level is encoded by **blink
+count** (e.g. 3 blinks = good, 2 = medium, 1 = low), so color is a free choice;
+green is picked for the best visibility-per-milliamp (near the eye's peak
+sensitivity ~555 nm) while keeping comfortable resistor headroom on the 3.3 V
+GPIO. (Blue/white are avoided — their ~3.0–3.4 V forward voltage leaves too little
+headroom to current-limit reliably from a 3.3 V pin.)
+
+- **Pin: nexus `2` (D2 = P0.17), active-high.** On the nice!nano / Supermini
+  left column the order top-to-bottom is `TX(1), RX(0), GND, GND, D2, D3, D4…`,
+  so **D2 sits immediately below a GND pad** — signal and ground land on adjacent
+  board-edge pads, the easiest possible solder job. Free pins are `0,1,2,3,20,21`
+  (matrix uses cols `4–9`, rows `19,18,15,14,16,10`); `20/21` are also free but
+  their nearest GND is several pads away, so D2 wins for wiring comfort.
+- **Resistor: 680 Ω, ¼ W.** With GPIO high ≈ 3.3 V and green Vf ≈ 2.2 V,
+  `R = (3.3 − 2.2) / I`. 680 Ω → ≈ 1.6 mA (frugal, clearly visible for a blink);
+  use 470 Ω → ≈ 2.3 mA if a brighter blink is wanted. Always include the resistor.
+- **Polarity:** long leg = anode → toward resistor / D2; short leg (flat edge of
+  the rim) = cathode → GND. Reversed = no light.
+
+Soldering schema (active-high: D2 HIGH = lit):
+
+```
+   Supermini / nice!nano v2 — left edge (USB at top)
+   ┌──────────────┐
+   │  TX  (1) ○   │
+   │  RX  (0) ○   │
+   │  GND     ●───────────────────────┐     ← GND pad (the one just above D2)
+   │  GND     ○   │                    │
+   │  D2  (2) ●──[ 680Ω ]──►|──────────┘
+   │  D3  (3) ○   │          ▲  ▲
+   │  D4  (4) ○   │          │  └─ cathode (short leg / flat side) → GND
+   │  ...         │          └──── anode   (long leg) ← from resistor
+   └──────────────┘                green LED
+
+   Current path:  D2 ──► 680Ω ──► anode(+) ─ green LED ─ cathode(−) ──► GND
+```
+
+Firmware side — declare the LED in the left overlay, then drive it from a
+single-LED battery-indicator module or a custom battery state-changed behavior:
+
+```dts
+/ {
+    leds {
+        compatible = "gpio-leds";
+        batt_led: batt_led {
+            gpios = <&pro_micro 2 GPIO_ACTIVE_HIGH>;
+        };
+    };
+};
+```
+
+The LED reflects only the half it is soldered to (the left/central half here), so
+add an identical one to the right half if both should be indicated. Mounting an
+LED inside a brown MX switch is possible (MX housings have a north-face LED
+window), but brown housings are usually opaque so only a focused point shows
+through; a clear-top switch or a case-wall mount near the controller reads better.

@@ -1,5 +1,19 @@
 #include "dactyl-manuform-5x6.dtsi"
 
+/ {
+    aliases {
+        batt-led = &batt_led;
+    };
+
+    leds {
+        compatible = "gpio-leds";
+        batt_led: batt_led {
+            // Green status LED: nexus D2 (P0.17), active-high, via 680R to GND.
+            gpios = <&pro_micro 2 GPIO_ACTIVE_HIGH>;
+        };
+    };
+};
+
 &kscan0 {
     col-gpios
         = <&pro_micro 4 GPIO_ACTIVE_HIGH>

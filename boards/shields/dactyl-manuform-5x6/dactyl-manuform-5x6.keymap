@@ -8,6 +8,15 @@
 #define RSE 2
 
 / {
+    behaviors {
+        // Show the battery level on the green indicator LED. GLOBAL locality:
+        // fires on both halves, each blinking its own LED for its own battery.
+        batt_led_show: batt_led_show {
+            compatible = "zmk,behavior-batt-led";
+            #binding-cells = <0>;
+        };
+    };
+
     keymap {
         compatible = "zmk,keymap";
 
@@ -39,10 +48,10 @@
 
         raise_layer {
             bindings = <
-&bootloader  &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &bt BT_SEL 3 &kp KP_NUM           &none   &none    &none    &none    &kp C_VOL_DN &kp C_VOL_UP
+&bootloader  &bt BT_SEL 0 &bt BT_SEL 1 &bt BT_SEL 2 &bt BT_SEL 3 &kp KP_NUM            &none   &none &none &none &kp C_VOL_DN &kp C_VOL_UP
 &bt BT_CLR   &out OUT_TOG &kp KP_N7    &kp KP_N8    &kp KP_N9    &none                 &none   &kp F24  &kp F23  &kp F22  &kp C_PREV   &kp C_NEXT
 &none        &none        &kp KP_N4    &kp KP_N5    &kp KP_N6    &kp KP_N0             &none   &kp F21  &kp F20  &kp F19  &kp C_MUTE   &kp C_PP
-&none        &kp LCTRL    &kp KP_N1    &kp KP_N2    &kp KP_N3    &none                 &none   &kp F18  &kp F17  &kp F16  &kp F15      &none
+&none        &kp LCTRL    &kp KP_N1    &kp KP_N2    &kp KP_N3    &none         &batt_led_show   &kp F18  &kp F17  &kp F16  &kp F15      &none
                           &none        &none                                                            &kp F14  &kp F13
                                                     &none        &kp LSHFT      &none   &none
                                                     &none        &kp LALT       &none   &none
