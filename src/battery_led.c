@@ -54,6 +54,11 @@ static K_WORK_DELAYABLE_DEFINE(blink_work, blink_work_handler);
 static void critical_work_handler(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(critical_work, critical_work_handler);
 
+#if IS_ENABLED(CONFIG_DACTYL_BATT_LED_BOOT_SELFTEST)
+static void selftest_work_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(selftest_work, selftest_work_handler);
+#endif
+
 static void blink_work_handler(struct k_work *work) {
     if (half_steps_remaining == 0) {
         gpio_pin_set_dt(&led, 0);
@@ -89,6 +94,16 @@ static void critical_work_handler(struct k_work *work) {
     blink(1);
     k_work_schedule(&critical_work, K_SECONDS(CRIT_INTERVAL));
 }
+
+#if IS_ENABLED(CONFIG_DACTYL_BATT_LED_BOOT_SELFTEST)
+// Diagnostic: blink twice, then re-arm, forever. Ignores the battery entirely
+// so it proves only the GPIO -> resistor -> LED path on this half.
+static void selftest_work_handler(struct k_work *work) {
+    blink(2);
+    k_work_schedule(&selftest_work,
+                    K_SECONDS(CONFIG_DACTYL_BATT_LED_BOOT_SELFTEST_INTERVAL_SEC));
+}
+#endif
 
 // Reflect the current battery level on the LED. When announce is true a blink
 // sequence is shown; the critical heartbeat is started (or stopped) regardless,
@@ -143,7 +158,14 @@ static int batt_led_init(void) {
         LOG_ERR("battery LED GPIO not ready");
         return -ENODEV;
     }
-    return gpio_pin_configure_dt(&led, GPIO_OUTPUT_INACTIVE);
+    int ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_INACTIVE);
+
+#if IS_ENABLED(CONFIG_DACTYL_BATT_LED_BOOT_SELFTEST)
+    LOG_WRN("battery LED boot self-test active");
+    k_work_schedule(&selftest_work, K_SECONDS(2));
+#endif
+
+    return ret;
 }
 
 SYS_INIT(batt_led_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
