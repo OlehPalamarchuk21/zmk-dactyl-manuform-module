@@ -1,13 +1,15 @@
 config DACTYL_BATT_LED
     bool "Green battery-level indicator LED"
     default y
-    depends on DT_HAS_GPIO_LEDS_ENABLED
+    depends on SHIELD_DACTYL-MANUFORM-5X6_RIGHT
     help
       Blink a single discrete LED to indicate the local battery state of
       charge: 3 blinks = good, 2 = medium, 1 = low, and a repeating blink
       below the critical level. Shown once after boot and on demand via the
-      &batt_led_show keymap behavior. Each half drives its own LED for its
-      own battery; auto-enabled wherever a gpio-leds node is defined.
+      &batt_led_show keymap behavior. Only the right half carries the LED, so
+      this is gated on the right shield. (DT_HAS_GPIO_LEDS_ENABLED is unreliable
+      as a gate here: the board itself defines a gpio-leds node, so it stays
+      true on the left half too.)
 
 if DACTYL_BATT_LED
 

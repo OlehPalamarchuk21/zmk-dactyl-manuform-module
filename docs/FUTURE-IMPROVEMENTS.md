@@ -58,7 +58,9 @@ Where it lives:
   `..._LEVEL_LOW=30`, `..._LEVEL_CRITICAL=10`, `..._CRITICAL_INTERVAL_SEC=30`,
   `..._BLINK_MS=200`); tunable from the shield `.conf`.
 - `CMakeLists.txt` — adds the sources to ZMK's `app` target (so `zmk/...`
-  headers resolve); LED driver built only where a `gpio-leds` node exists.
+  headers resolve); LED driver (`src/battery_led.c`) built only when
+  `CONFIG_DACTYL_BATT_LED` is set, which `Kconfig` gates on the **right**
+  shield (`SHIELD_DACTYL-MANUFORM-5X6_RIGHT`).
 - Only the right overlay declares the `batt-led` gpio-leds node; `.conf` sets
   `CONFIG_ZMK_BATTERY_REPORTING=y`; `zephyr/module.yml` adds `cmake`/`kconfig`/
   `dts_root`.
