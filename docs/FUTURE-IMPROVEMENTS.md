@@ -39,7 +39,7 @@ half has no LED node, so the LED driver is not compiled into the left build.
 
 Behavior (the LED reflects the right half's own battery):
 
-- **Blink count = level:** 3 blinks `>70%`, 2 blinks `>30%`, 1 blink `≤30%`.
+- **Blink count = level:** 3 blinks `>90%`, 2 blinks `>20%`, 1 blink `≤20%`.
 - **Critical heartbeat:** at `≤10%`, one blink every 30 s (repeating) instead of
   a steady light, to save power.
 - **Boot:** announces the level once on the first battery reading.
@@ -54,8 +54,8 @@ Where it lives:
 - `src/battery_led.c` — LED state machine + battery listener (`batt_led_show()`).
 - `src/behavior_batt_led.c` — the `&batt_led_show` behavior (global locality).
 - `dts/bindings/behaviors/zmk,behavior-batt-led.yaml` — behavior binding.
-- `Kconfig` — `CONFIG_DACTYL_BATT_LED` + thresholds (`..._LEVEL_HIGH=70`,
-  `..._LEVEL_LOW=30`, `..._LEVEL_CRITICAL=10`, `..._CRITICAL_INTERVAL_SEC=30`,
+- `Kconfig` — `CONFIG_DACTYL_BATT_LED` + thresholds (`..._LEVEL_HIGH=90`,
+  `..._LEVEL_LOW=20`, `..._LEVEL_CRITICAL=10`, `..._CRITICAL_INTERVAL_SEC=30`,
   `..._BLINK_MS=200`); tunable from the shield `.conf`.
 - `CMakeLists.txt` — adds the sources to ZMK's `app` target (so `zmk/...`
   headers resolve); LED driver (`src/battery_led.c`) built only when

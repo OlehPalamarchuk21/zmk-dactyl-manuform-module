@@ -15,11 +15,11 @@ if DACTYL_BATT_LED
 
 config DACTYL_BATT_LED_LEVEL_HIGH
     int "Battery percentage above which 3 blinks are shown"
-    default 70
+    default 90
 
 config DACTYL_BATT_LED_LEVEL_LOW
     int "Battery percentage above which 2 blinks are shown (at or below = 1 blink)"
-    default 30
+    default 20
 
 config DACTYL_BATT_LED_LEVEL_CRITICAL
     int "Battery percentage at or below which the low-battery heartbeat runs"
@@ -32,19 +32,5 @@ config DACTYL_BATT_LED_CRITICAL_INTERVAL_SEC
 config DACTYL_BATT_LED_BLINK_MS
     int "LED on/off duration per blink half-step, in milliseconds"
     default 200
-
-config DACTYL_BATT_LED_BOOT_SELFTEST
-    bool "Repeatedly blink the LED at boot, ignoring the battery"
-    default n
-    help
-      Diagnostic only. When enabled, the LED blinks twice every few seconds
-      forever, starting a couple of seconds after boot, independent of any
-      battery reading or the split link. Use it to prove the GPIO -> resistor
-      -> LED path works on a half. Turn this back off for normal use.
-
-config DACTYL_BATT_LED_BOOT_SELFTEST_INTERVAL_SEC
-    int "Seconds between self-test blink bursts"
-    default 3
-    depends on DACTYL_BATT_LED_BOOT_SELFTEST
 
 endif
