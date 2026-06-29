@@ -1,9 +1,9 @@
 # Future Improvements — Dactyl Manuform 5x6 (ZMK)
 
-_Last updated: 2026-06-28_
+_Last updated: 2026-06-29_
 
-Hardware/firmware ideas. Items 1–2 are not done yet; item 3 (battery-level LED)
-is **implemented on both halves** — each LED reflects its own half's battery.
+Hardware/firmware ideas. Item 1 is not done yet; item 2 (battery-level LED) is
+**implemented on both halves**; item 3 (RGB upgrade) is a future goal.
 
 ## 1. Add a physical battery switch
 
@@ -16,220 +16,36 @@ Add a hardware ON/OFF switch in line with each battery, one per half.
   battery input. Use a small slide/toggle switch that fits the case. Do this on
   **both** halves, since each carries its own battery.
 
-## 2. Change the charging current via the solder jumper
+## 2. Battery-level LED — ✅ DONE
 
-The nice!nano v2 (and the Supermini nRF52840 drop-in) sets its LiPo charge
-current with an on-board solder jumper / bridge.
-
-- **Why:** match the charge current to the actual battery capacity. Small cells
-  charge safer/cooler at a lower current; larger cells can take a higher one.
-- **How:** bridge (or open) the charge-current solder pads on the controller to
-  select the desired current. Confirm the exact pads and resulting current from
-  the controller pinout/schematic before soldering:
-  https://nicekeyboards.com/docs/nice-nano/pinout-schematic
-- **Notes:** never set a current above your battery's rated charge limit. Apply
-  the same change on **both** halves if both use the same battery.
-
-## 3. Add a LED for battery-level indication — ✅ DONE
-
-**Implemented** on **both halves**: a green discrete LED on nexus `D2`
-(active-high, via 680 Ω to GND) on each controller, driven by a small in-repo
-ZMK module. Each half drives its own LED for its own battery.
+A green discrete LED on each half blinks that half's own battery level; it stays
+dark otherwise, so idle draw is ~zero.
 
 Behavior (each LED reflects its own half's battery):
 
 - **Blink count = level:** 3 blinks `>90%`, 2 blinks `>20%`, 1 blink `≤20%`.
-- **Critical heartbeat:** at `≤10%`, one blink every 30 s (repeating) instead of
-  a steady light, to save power.
+- **Critical heartbeat:** at `≤10%`, one blink every 30 s instead of a steady
+  light, to save power.
 - **Boot:** announces the level once on the first battery reading.
-- **On demand:** the `&batt_led_show` keymap behavior, on the **raise** layer
-  (right half, bottom main row, innermost key). It has `BEHAVIOR_LOCALITY_GLOBAL`
-  so one keypress fires on both halves — each blinks its own LED for its own
-  battery (the right/peripheral half blinks only while the split link is
-  connected, since the press is relayed from the central).
+- **On demand:** the `&batt_led_show` keymap behavior (raise layer) blinks both
+  halves — each its own level; the right blinks only while the split link is
+  connected.
 
-Where it lives:
+Where it lives: `src/battery_led.c` (state machine + battery listener),
+`src/behavior_batt_led.c` (the `&batt_led_show` global behavior),
+`dts/bindings/behaviors/zmk,behavior-batt-led.yaml`, `Kconfig`
+(`CONFIG_DACTYL_BATT_LED` + thresholds), and the `batt-led` `gpio-leds` node in
+both shield overlays.
 
-- `src/battery_led.c` — LED state machine + battery listener (`batt_led_show()`).
-- `src/behavior_batt_led.c` — the `&batt_led_show` behavior (global locality).
-- `dts/bindings/behaviors/zmk,behavior-batt-led.yaml` — behavior binding.
-- `Kconfig` — `CONFIG_DACTYL_BATT_LED` + thresholds (`..._LEVEL_HIGH=90`,
-  `..._LEVEL_LOW=20`, `..._LEVEL_CRITICAL=10`, `..._CRITICAL_INTERVAL_SEC=30`,
-  `..._BLINK_MS=200`); tunable from the shield `.conf`.
-- `CMakeLists.txt` — adds the sources to ZMK's `app` target (so `zmk/...`
-  headers resolve); LED driver (`src/battery_led.c`) built only when
-  `CONFIG_DACTYL_BATT_LED` is set (`Kconfig` defaults it on wherever a
-  `gpio-leds` node exists — i.e. both halves).
-- Both overlays declare the `batt-led` gpio-leds node; `.conf` sets
-  `CONFIG_ZMK_BATTERY_REPORTING=y`; `zephyr/module.yml` adds `cmake`/`kconfig`/
-  `dts_root`.
+### Hardware — pin & LED connection
 
-The original design notes below are kept for rationale and the soldering schema.
-
-### Notes / troubleshooting — battery LED (both halves)
-
-Both halves carry their own LED on `&pro_micro 2` (D2 / P0.17) and drive it from
-the same module. A few lessons from bring-up:
-
-**Don't try to make it "one half only" by deleting just the overlay node.**
-`CONFIG_DACTYL_BATT_LED` is gated on `DT_HAS_GPIO_LEDS_ENABLED`, which is true
-whenever **any** `gpio-leds` node exists — and the `nice_nano_v2` board defines
-its own. So removing our `batt-led` node from one overlay does **not** disable
-the config on that half; `src/battery_led.c` still compiles, finds no `batt_led`
-alias, and fails the build with
-`#error "Define a 'batt-led' alias pointing to a gpio-leds child node"`.
-Conversely, gating the config on a shield symbol
-(`depends on SHIELD_DACTYL-MANUFORM-5X6_RIGHT`) is fragile and was observed to
-disable the LED on **both** halves. The reliable setup is the current one: a
-`batt-led` node in *both* overlays, config left on `DT_HAS_GPIO_LEDS_ENABLED`.
-If you genuinely want a single-half LED later, gate it in the shield
-`Kconfig.defconfig` (the same place `ZMK_SPLIT_ROLE_CENTRAL` is set), not with a
-`depends on` in the module `Kconfig`.
-
-**Blink-on-boot is not a fault.** Each LED "blinks a couple of times then goes
-dark" at power-on — that **is** the intended boot-announce (it shows the level
-once, then stays dark to save power). Seeing those boot blinks proves the whole
-chain works on that half: GPIO P0.17 → resistor → LED, the driver running, and a
-`zmk_battery_state_changed` event arriving (the announce fires on the first
-battery reading).
-
-#### Diagnosing a dark LED on a half, in order
-
-1. **Reflash the matching half.** Each half needs its own `_left` / `_right`
-   artifact; flashing `_left` to the right leaves it acting as the central and
-   breaks the split. Reflash **both** halves with the current build.
-2. **Confirm it's not just blink-on-boot.** Power-cycle the half and watch for a
-   short burst of blinks within the first few seconds — that's the level
-   announce. The LED is *meant* to be dark the rest of the time.
-3. **Test the hardware path independent of firmware.** Touch the resistor end to
-   a 3V3 pad (cathode to GND): if the LED lights, wiring/polarity/joints are
-   good. Polarity: long leg/anode toward the resistor & D2, short leg/cathode to
-   GND.
-4. **Isolate firmware from the battery event.** The blink machinery only runs on
-   a `zmk_battery_state_changed` event. To prove the GPIO path alone, add a
-   temporary boot self-test that blinks on a timer regardless of the battery
-   (used during bring-up, then removed). If the self-test blinks but normal use
-   does not, the issue is battery-event delivery, not the LED.
-5. **The hotkey on the peripheral needs the link.** `&batt_led_show` is processed
-   on the central (left) and relayed to the peripheral (right) over the split
-   link. If the halves aren't connected at that moment, the press won't reach the
-   right LED — though each half's own boot-announce and critical heartbeat still
-   run independently of the link.
-
-**Hotkey blinks the central but not the peripheral — behavior device-name
-length.** Observed: at boot both LEDs blink (so both halves' hardware, driver,
-and battery events are fine), but pressing `&batt_led_show` blinks only the left.
-Cause: ZMK relays a custom behavior to the peripheral by its **device name** in a
-small fixed buffer (`ZMK_SPLIT_RUN_BEHAVIOR_DEV_LEN`, ~9 bytes / 8 usable chars).
-The original node name `batt_led_show` (13 chars) was truncated in the relay, so
-the peripheral couldn't resolve the behavior and never ran it. Built-in global
-behaviors (`&rgb_ug`, `&ext_power`) avoid this because they sync *state* over
-dedicated split channels rather than the name-based behavior relay. **Fix:** keep
-the behavior node's **name short** — the node is `batshow` (device name 7 chars)
-with the `batt_led_show` phandle label retained so the keymap is unchanged. Don't
-rename it back to anything longer than 8 characters.
-
-### Original idea
-
-Solder a small LED to a free GPIO on the controller and drive it from ZMK to
-signal battery state (e.g. blink a few times on boot, or warn when low).
-
-- **Why:** quick visual check of remaining charge without opening the host's
-  Bluetooth/battery UI. Useful for catching a low battery before the half dies
-  mid-use.
-- **How (hardware):** pick a free `&pro_micro` pin (the matrix already uses
-  columns `4–9` and rows `19, 18, 15, 14, 16, 10`, so avoid those — typical free
-  pins are `0, 1, 2, 3, 20, 21`). Wire `GPIO → current-limiting resistor
-  (~330Ω–1kΩ) → LED → GND` (active-high) or `3V3 → resistor → LED → GPIO`
-  (active-low). Always include the resistor; nRF52840 GPIOs source only a few mA.
-- **How (firmware):** declare a `gpio-leds` node in the shield overlay, then
-  either pull in a single-LED status module via `config/west.yml`
-  (e.g. zmk-poor-mans-led-indicator or zmk-batt-led-indicator) and set its
-  `CONFIG_*_BATTERY_LEVEL_*` thresholds in the shield `.conf`, or write a custom
-  behavior that toggles the LED on the battery state-changed event. For an RGB
-  LED, caksoylar/zmk-rgbled-widget blinks green/yellow/red by level.
-- **Notes:** prefer blink-on-boot / blink-on-change over a constantly-lit LED to
-  avoid draining a wireless battery. The LED only reflects the half it is soldered
-  to, so add one per half if both halves should be indicated. Confirm the chosen
-  pad is a genuinely free, broken-out GPIO (not a power/analog/SWD pin) on the
-  controller schematic before soldering:
-  https://nicekeyboards.com/docs/nice-nano/pinout-schematic
-
-### Choosing the LED type — power efficiency (for future investigation)
-
-The key realization: the ~0.5–1 mA idle drain is a property of *addressable*
-LEDs (WS2812 / SK6812), not of LEDs in general. Every WS2812/SK6812 contains a
-small controller IC that is powered 24/7 and sips ~0.5–1 mA whenever its VDD is
-live, regardless of what color (even "off") you send — there is no power-off
-command in the protocol. A plain "dumb" / discrete LED has **no idle draw at
-all**: when its GPIO is low, essentially zero current flows (nanoamp leakage),
-and it only uses power during the brief moments it actually blinks.
-
-Why that matters here: a well-configured ZMK split on nRF52840 averages only
-~0.05–0.3 mA when connected and idle (hence weeks-to-months of life on a
-~100–500 mAh LiPo). So a continuous 0.5–1 mA from an addressable LED is in the
-same league as — or larger than — the entire keyboard, and can roughly halve
-battery life or worse. Example on a 300 mAh cell: the LED idle alone (~0.75 mA)
-would flatten it in ~16 days; on a 110 mAh cell, ~6 days. The blink energy
-itself is negligible — the idle current was the whole problem.
-
-Options, roughly best-to-worst on power:
-
-1. **Single discrete LED (one color)** — most efficient, simplest. 1 GPIO + 1
-   resistor, **zero idle draw**, only ~1–2 mA while blinking. Encode battery
-   level by blink *pattern* (e.g. 3 blinks = good, 2 = medium, 1 = low) instead
-   of color. Uses only one pin.
-2. **Discrete analog RGB LED (common-anode/cathode)** — efficient *and* color
-   coded. 3 GPIOs + 3 resistors, **zero idle draw**, lights only when blinking.
-   Gives green/yellow/red-by-level. This is the mode `caksoylar/zmk-rgbled-widget`
-   was originally built for, via a plain `gpio-leds` node (no `led-strip` driver,
-   no power-gating FET needed). Costs 3 of the ~6 free pins (`0,1,2,3,20,21`).
-3. **Two discrete LEDs (e.g. green + red)** — middle ground. 2 GPIOs + 2
-   resistors, zero idle. Green = good, red = low, both = amber-ish.
-4. **WS2812B strip / SK6812 MINI-E** — least efficient at idle. The SK6812
-   MINI-E is smaller than a 5050 strip but has the same ~0.5–1 mA parasitic
-   idle, so it is not more power-effective. The only way to make any addressable
-   LED frugal is a hardware power-gate.
-
-A software key-combo on/off does **not** remove the addressable-LED idle draw —
-it only changes the color, while the IC stays powered. To truly cut it you must
-remove VDD: either a physical slide switch in the LED's power lead, or a
-P-channel MOSFET / load-switch between the 3V3 rail and the LED's `+5V` pad with
-its gate driven by a free GPIO (key combo → GPIO → FET → LED power). Costs one
-extra GPIO plus the FET. Do not power a 5050 pixel's VDD directly from a GPIO —
-it can pull far more than an nRF52840 pin can safely source.
-
-If using the existing WS2812B addressable strip: cut a single segment at a
-cut-line, wire `GPIO → DIN` (not `DO` — follow the data-direction arrow),
-`3V3 → +5V`, `GND → GND`. Power it from **3V3, not 5V**: the GPIO swings only
-0–3.3V and WS2812B logic-high is ~0.7×VDD, so a 5V supply makes the 3.3V data
-signal marginal; a 3V3 supply drops the threshold to ~2.3V which the GPIO drives
-cleanly (slightly dimmer, but reliable).
-
-**Recommendation:** for best battery life with color coding, use a **discrete
-analog RGB LED on 3 GPIOs** (option 2) — zero idle, blink-only, green/yellow/red,
-no extra FET, directly supported by the widget. For the absolute lowest power /
-fewest pins, a **single discrete LED with blink-count patterns** (option 1).
-Reserve the WS2812B/SK6812 path only if a power-gate FET is added.
-
-### Chosen plan: single green discrete LED (option 1)
-
-Concrete decisions for when this gets built. Battery level is encoded by **blink
-count** (e.g. 3 blinks = good, 2 = medium, 1 = low), so color is a free choice;
-green is picked for the best visibility-per-milliamp (near the eye's peak
-sensitivity ~555 nm) while keeping comfortable resistor headroom on the 3.3 V
-GPIO. (Blue/white are avoided — their ~3.0–3.4 V forward voltage leaves too little
-headroom to current-limit reliably from a 3.3 V pin.)
-
-- **Pin: nexus `2` (D2 = P0.17), active-high.** On the nice!nano / Supermini
-  left column the order top-to-bottom is `TX(1), RX(0), GND, GND, D2, D3, D4…`,
-  so **D2 sits immediately below a GND pad** — signal and ground land on adjacent
-  board-edge pads, the easiest possible solder job. Free pins are `0,1,2,3,20,21`
-  (matrix uses cols `4–9`, rows `19,18,15,14,16,10`); `20/21` are also free but
-  their nearest GND is several pads away, so D2 wins for wiring comfort.
-- **Resistor: 680 Ω, ¼ W.** With GPIO high ≈ 3.3 V and green Vf ≈ 2.2 V,
-  `R = (3.3 − 2.2) / I`. 680 Ω → ≈ 1.6 mA (frugal, clearly visible for a blink);
-  use 470 Ω → ≈ 2.3 mA if a brighter blink is wanted. Always include the resistor.
+- **Pin: nexus `2` (D2 = P0.17), active-high**, on **both** controllers. D2 sits
+  immediately below a GND pad on the board edge — signal and ground on adjacent
+  pads, the easiest solder job. (Other free pins: `0,1,3,20,21`; the matrix uses
+  cols `4–9`, rows `19,18,15,14,16,10`.)
+- **Resistor: 680 Ω, ¼ W.** GPIO high ≈ 3.3 V, green Vf ≈ 2.2 V →
+  `(3.3 − 2.2) / 680 ≈ 1.6 mA` (frugal, clearly visible). Use 470 Ω → ≈ 2.3 mA
+  for a brighter blink. Always include the resistor.
 - **Polarity:** long leg = anode → toward resistor / D2; short leg (flat edge of
   the rim) = cathode → GND. Reversed = no light.
 
@@ -251,11 +67,11 @@ Soldering schema (active-high: D2 HIGH = lit):
    Current path:  D2 ──► 680Ω ──► anode(+) ─ green LED ─ cathode(−) ──► GND
 ```
 
-Firmware side — declare the LED in the left overlay, then drive it from a
-single-LED battery-indicator module or a custom battery state-changed behavior:
+Devicetree node (present in each shield overlay):
 
 ```dts
 / {
+    aliases { batt-led = &batt_led; };
     leds {
         compatible = "gpio-leds";
         batt_led: batt_led {
@@ -265,8 +81,24 @@ single-LED battery-indicator module or a custom battery state-changed behavior:
 };
 ```
 
-The LED reflects only the half it is soldered to (the left/central half here), so
-add an identical one to the right half if both should be indicated. Mounting an
-LED inside a brown MX switch is possible (MX housings have a north-face LED
-window), but brown housings are usually opaque so only a focused point shows
-through; a clear-top switch or a case-wall mount near the controller reads better.
+## 3. Upgrade the battery LED to an RGB LED
+
+Replace the single green LED with a **discrete analog RGB LED** (common-anode or
+common-cathode) so level can be shown by **colour** (green/yellow/red) as well as
+— or instead of — blink count.
+
+- **Why:** colour is read at a glance, no blink-counting. A *discrete* (not
+  addressable) RGB LED keeps the zero-idle-draw property — it draws current only
+  while lit, unlike WS2812/SK6812 pixels whose controller IC sips ~0.5–1 mA 24/7
+  and would noticeably cut battery life.
+- **Hardware:** 3 free GPIOs + 3 current-limiting resistors per half (one per
+  R/G/B leg), plus the common pin to GND (common-cathode) or 3V3 (common-anode).
+  Free nexus pins are `0,1,3,20,21` (D2/P0.17 already drives the current green
+  LED). Size each resistor for its colour's forward voltage (red ≈ 1.8 V,
+  green/blue ≈ 2.0–3.2 V) off the 3.3 V GPIO.
+- **Firmware:** declare a 3-channel `gpio-leds` node (or `pwm-leds` for blended
+  colours) and extend `src/battery_led.c` to pick colour by level. Alternatively
+  pull in `caksoylar/zmk-rgbled-widget` via `config/west.yml` — it already does
+  green/yellow/red-by-level over a plain `gpio-leds` node.
+- **Notes:** keep blink-on-change rather than steady-on to save power; add one
+  per half; avoid addressable strips unless a power-gate FET is added.

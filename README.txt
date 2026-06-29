@@ -42,9 +42,26 @@ FEATURES
 - 12-column x 6-row col2row diode matrix; right half mirrored via col-offset.
 - Keymap with 3 layers: default (Colemak), lower (symbols / numpad / nav),
   and raise (Bluetooth, output toggle, bootloader, function & media keys).
+- Battery-level LED on each half (see below).
 
 Keymap file:
   boards/shields/dactyl-manuform-5x6/dactyl-manuform-5x6.keymap
+
+
+BATTERY LED
+-----------
+A green LED on each half blinks its own half's battery level. It stays dark
+otherwise, so idle power draw is ~zero.
+
+- Blink count = level: 3 = >90%, 2 = 20-90%, 1 = <=20%.
+- Boot: announces the level once on the first battery reading.
+- Critical (<=10%): one blink every 30 s instead of a steady light.
+- On demand: &batt_led_show on the raise layer blinks both halves (the right
+  blinks only while the split link is connected).
+
+Hardware: nexus D2 (P0.17), active-high, via 680R to GND, on both controllers.
+Tunables (thresholds, blink timing) live in Kconfig; details and the soldering
+schema are in docs/FUTURE-IMPROVEMENTS.md (section 3).
 
 
 DOCS
