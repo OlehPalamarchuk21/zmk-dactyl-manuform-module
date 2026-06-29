@@ -1,8 +1,10 @@
 # Future Improvements — Dactyl Manuform 5x6 (ZMK)
 
-_Last updated: 2026-06-26_
+_Last updated: 2026-06-28_
 
-Hardware/firmware ideas to tackle later. Not done yet.
+Hardware/firmware ideas. Items 1–2 are not done yet; item 3 (battery-level LED)
+is **implemented on the right half only** (it reflects the right half's own
+battery).
 
 ## 1. Add a physical battery switch
 
@@ -29,7 +31,64 @@ current with an on-board solder jumper / bridge.
 - **Notes:** never set a current above your battery's rated charge limit. Apply
   the same change on **both** halves if both use the same battery.
 
-## 3. Add a LED for battery-level indication
+## 3. Add a LED for battery-level indication — ✅ DONE
+
+**Implemented** on the **right half only**: a green discrete LED on nexus `D2`
+(active-high, via 680 Ω to GND), driven by a small in-repo ZMK module. The left
+half has no LED node, so the LED driver is not compiled into the left build.
+
+Behavior (the LED reflects the right half's own battery):
+
+- **Blink count = level:** 3 blinks `>70%`, 2 blinks `>30%`, 1 blink `≤30%`.
+- **Critical heartbeat:** at `≤10%`, one blink every 30 s (repeating) instead of
+  a steady light, to save power.
+- **Boot:** announces the level once on the first battery reading.
+- **On demand:** the `&batt_led_show` keymap behavior, on the **raise** layer
+  (right half, bottom main row, innermost key). It has `BEHAVIOR_LOCALITY_GLOBAL`
+  so the keypress fires on both halves, but it's a no-op on the left (no LED);
+  only the right LED blinks, and only while the split link is connected so the
+  press reaches the right half.
+
+Where it lives:
+
+- `src/battery_led.c` — LED state machine + battery listener (`batt_led_show()`).
+- `src/behavior_batt_led.c` — the `&batt_led_show` behavior (global locality).
+- `dts/bindings/behaviors/zmk,behavior-batt-led.yaml` — behavior binding.
+- `Kconfig` — `CONFIG_DACTYL_BATT_LED` + thresholds (`..._LEVEL_HIGH=70`,
+  `..._LEVEL_LOW=30`, `..._LEVEL_CRITICAL=10`, `..._CRITICAL_INTERVAL_SEC=30`,
+  `..._BLINK_MS=200`); tunable from the shield `.conf`.
+- `CMakeLists.txt` — adds the sources to ZMK's `app` target (so `zmk/...`
+  headers resolve); LED driver built only where a `gpio-leds` node exists.
+- Only the right overlay declares the `batt-led` gpio-leds node; `.conf` sets
+  `CONFIG_ZMK_BATTERY_REPORTING=y`; `zephyr/module.yml` adds `cmake`/`kconfig`/
+  `dts_root`.
+
+The original design notes below are kept for rationale and the soldering schema.
+
+### Notes / troubleshooting — right (peripheral) LED
+
+The right LED stayed dark while the left worked, with identical wiring and code.
+Cause: the right half was still running **old firmware** built before the
+`batt-led` node was added to `dactyl-manuform-5x6_right.overlay`, so that build
+had no LED code at all. **Fix: flash the latest `dactyl-manuform-5x6_right…uf2`
+to the right half specifically** (not the `_left` file). After reflashing both
+halves with the current build, both LEDs work, including the hotkey.
+
+Things to remember when the right LED misbehaves:
+
+- **Reflash the matching half.** Each half needs its own `_left` / `_right`
+  artifact; flashing `_left` to both leaves the right with no LED firmware.
+- **Right responds to the hotkey only while connected.** The key press is
+  processed on the central (left) and forwarded to the peripheral (right) via
+  the split link (`BEHAVIOR_LOCALITY_GLOBAL`). If the halves aren't paired/
+  connected at that moment, the right LED won't blink on the keypress — though
+  its own boot-announce and critical heartbeat still run independently.
+- **If still dark after reflashing the latest `_right`:** suspect hardware on
+  the right LED only (left is proven good) — check LED polarity (long leg/anode
+  toward the resistor & D2, short leg/cathode to GND) and the solder joints on
+  D2 and the adjacent GND pad for continuity.
+
+### Original idea
 
 Solder a small LED to a free GPIO on the controller and drive it from ZMK to
 signal battery state (e.g. blink a few times on boot, or warn when low).

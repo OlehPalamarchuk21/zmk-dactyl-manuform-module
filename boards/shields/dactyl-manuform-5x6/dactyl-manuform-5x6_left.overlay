@@ -1,18 +1,10 @@
 #include "dactyl-manuform-5x6.dtsi"
 
-/ {
-    aliases {
-        batt-led = &batt_led;
-    };
-
-    leds {
-        compatible = "gpio-leds";
-        batt_led: batt_led {
-            // Green status LED: nexus D2 (P0.17), active-high, via 680R to GND.
-            gpios = <&pro_micro 2 GPIO_ACTIVE_HIGH>;
-        };
-    };
-};
+// No battery-level LED on the left half: only the right half carries one.
+// Without a gpio-leds node here, DACTYL_BATT_LED (depends on
+// DT_HAS_GPIO_LEDS_ENABLED) stays off, so src/battery_led.c is not compiled
+// into the left build. The &batt_led_show behavior is still compiled on both
+// halves (a weak no-op on the left).
 
 &kscan0 {
     col-gpios
