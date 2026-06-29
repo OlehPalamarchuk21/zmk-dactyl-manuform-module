@@ -11,7 +11,13 @@
     behaviors {
         // Show the battery level on the green indicator LED. GLOBAL locality:
         // fires on both halves, each blinking its own LED for its own battery.
-        batt_led_show: batt_led_show {
+        // The node name is kept SHORT (the device name `batshow`, 7 chars) on
+        // purpose: ZMK relays a behavior to the peripheral by its device name in
+        // a small fixed buffer (ZMK_SPLIT_RUN_BEHAVIOR_DEV_LEN, ~9 bytes). A long
+        // name is truncated and the peripheral can't find it, so the right LED
+        // never blinks on the hotkey. The `batt_led_show` label is unchanged so
+        // the keymap reference below still works.
+        batt_led_show: batshow {
             compatible = "zmk,behavior-batt-led";
             #binding-cells = <0>;
         };

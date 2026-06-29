@@ -116,6 +116,19 @@ battery reading).
    right LED — though each half's own boot-announce and critical heartbeat still
    run independently of the link.
 
+**Hotkey blinks the central but not the peripheral — behavior device-name
+length.** Observed: at boot both LEDs blink (so both halves' hardware, driver,
+and battery events are fine), but pressing `&batt_led_show` blinks only the left.
+Cause: ZMK relays a custom behavior to the peripheral by its **device name** in a
+small fixed buffer (`ZMK_SPLIT_RUN_BEHAVIOR_DEV_LEN`, ~9 bytes / 8 usable chars).
+The original node name `batt_led_show` (13 chars) was truncated in the relay, so
+the peripheral couldn't resolve the behavior and never ran it. Built-in global
+behaviors (`&rgb_ug`, `&ext_power`) avoid this because they sync *state* over
+dedicated split channels rather than the name-based behavior relay. **Fix:** keep
+the behavior node's **name short** — the node is `batshow` (device name 7 chars)
+with the `batt_led_show` phandle label retained so the keymap is unchanged. Don't
+rename it back to anything longer than 8 characters.
+
 ### Original idea
 
 Solder a small LED to a free GPIO on the controller and drive it from ZMK to
