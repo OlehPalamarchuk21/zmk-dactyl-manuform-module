@@ -3,8 +3,7 @@
 _Last updated: 2026-06-28_
 
 Hardware/firmware ideas. Items 1–2 are not done yet; item 3 (battery-level LED)
-is **implemented on the right half only** (it reflects the right half's own
-battery).
+is **implemented on both halves** — each LED reflects its own half's battery.
 
 ## 1. Add a physical battery switch
 
@@ -33,11 +32,11 @@ current with an on-board solder jumper / bridge.
 
 ## 3. Add a LED for battery-level indication — ✅ DONE
 
-**Implemented** on the **right half only**: a green discrete LED on nexus `D2`
-(active-high, via 680 Ω to GND), driven by a small in-repo ZMK module. The left
-half has no LED node, so the LED driver is not compiled into the left build.
+**Implemented** on **both halves**: a green discrete LED on nexus `D2`
+(active-high, via 680 Ω to GND) on each controller, driven by a small in-repo
+ZMK module. Each half drives its own LED for its own battery.
 
-Behavior (the LED reflects the right half's own battery):
+Behavior (each LED reflects its own half's battery):
 
 - **Blink count = level:** 3 blinks `>90%`, 2 blinks `>20%`, 1 blink `≤20%`.
 - **Critical heartbeat:** at `≤10%`, one blink every 30 s (repeating) instead of
@@ -45,9 +44,9 @@ Behavior (the LED reflects the right half's own battery):
 - **Boot:** announces the level once on the first battery reading.
 - **On demand:** the `&batt_led_show` keymap behavior, on the **raise** layer
   (right half, bottom main row, innermost key). It has `BEHAVIOR_LOCALITY_GLOBAL`
-  so the keypress fires on both halves, but it's a no-op on the left (no LED);
-  only the right LED blinks, and only while the split link is connected so the
-  press reaches the right half.
+  so one keypress fires on both halves — each blinks its own LED for its own
+  battery (the right/peripheral half blinks only while the split link is
+  connected, since the press is relayed from the central).
 
 Where it lives:
 
@@ -59,36 +58,63 @@ Where it lives:
   `..._BLINK_MS=200`); tunable from the shield `.conf`.
 - `CMakeLists.txt` — adds the sources to ZMK's `app` target (so `zmk/...`
   headers resolve); LED driver (`src/battery_led.c`) built only when
-  `CONFIG_DACTYL_BATT_LED` is set, which `Kconfig` gates on the **right**
-  shield (`SHIELD_DACTYL-MANUFORM-5X6_RIGHT`).
-- Only the right overlay declares the `batt-led` gpio-leds node; `.conf` sets
+  `CONFIG_DACTYL_BATT_LED` is set (`Kconfig` defaults it on wherever a
+  `gpio-leds` node exists — i.e. both halves).
+- Both overlays declare the `batt-led` gpio-leds node; `.conf` sets
   `CONFIG_ZMK_BATTERY_REPORTING=y`; `zephyr/module.yml` adds `cmake`/`kconfig`/
   `dts_root`.
 
 The original design notes below are kept for rationale and the soldering schema.
 
-### Notes / troubleshooting — right (peripheral) LED
+### Notes / troubleshooting — battery LED (both halves)
 
-The right LED stayed dark while the left worked, with identical wiring and code.
-Cause: the right half was still running **old firmware** built before the
-`batt-led` node was added to `dactyl-manuform-5x6_right.overlay`, so that build
-had no LED code at all. **Fix: flash the latest `dactyl-manuform-5x6_right…uf2`
-to the right half specifically** (not the `_left` file). After reflashing both
-halves with the current build, both LEDs work, including the hotkey.
+Both halves carry their own LED on `&pro_micro 2` (D2 / P0.17) and drive it from
+the same module. A few lessons from bring-up:
 
-Things to remember when the right LED misbehaves:
+**Don't try to make it "one half only" by deleting just the overlay node.**
+`CONFIG_DACTYL_BATT_LED` is gated on `DT_HAS_GPIO_LEDS_ENABLED`, which is true
+whenever **any** `gpio-leds` node exists — and the `nice_nano_v2` board defines
+its own. So removing our `batt-led` node from one overlay does **not** disable
+the config on that half; `src/battery_led.c` still compiles, finds no `batt_led`
+alias, and fails the build with
+`#error "Define a 'batt-led' alias pointing to a gpio-leds child node"`.
+Conversely, gating the config on a shield symbol
+(`depends on SHIELD_DACTYL-MANUFORM-5X6_RIGHT`) is fragile and was observed to
+disable the LED on **both** halves. The reliable setup is the current one: a
+`batt-led` node in *both* overlays, config left on `DT_HAS_GPIO_LEDS_ENABLED`.
+If you genuinely want a single-half LED later, gate it in the shield
+`Kconfig.defconfig` (the same place `ZMK_SPLIT_ROLE_CENTRAL` is set), not with a
+`depends on` in the module `Kconfig`.
 
-- **Reflash the matching half.** Each half needs its own `_left` / `_right`
-  artifact; flashing `_left` to both leaves the right with no LED firmware.
-- **Right responds to the hotkey only while connected.** The key press is
-  processed on the central (left) and forwarded to the peripheral (right) via
-  the split link (`BEHAVIOR_LOCALITY_GLOBAL`). If the halves aren't paired/
-  connected at that moment, the right LED won't blink on the keypress — though
-  its own boot-announce and critical heartbeat still run independently.
-- **If still dark after reflashing the latest `_right`:** suspect hardware on
-  the right LED only (left is proven good) — check LED polarity (long leg/anode
-  toward the resistor & D2, short leg/cathode to GND) and the solder joints on
-  D2 and the adjacent GND pad for continuity.
+**Blink-on-boot is not a fault.** Each LED "blinks a couple of times then goes
+dark" at power-on — that **is** the intended boot-announce (it shows the level
+once, then stays dark to save power). Seeing those boot blinks proves the whole
+chain works on that half: GPIO P0.17 → resistor → LED, the driver running, and a
+`zmk_battery_state_changed` event arriving (the announce fires on the first
+battery reading).
+
+#### Diagnosing a dark LED on a half, in order
+
+1. **Reflash the matching half.** Each half needs its own `_left` / `_right`
+   artifact; flashing `_left` to the right leaves it acting as the central and
+   breaks the split. Reflash **both** halves with the current build.
+2. **Confirm it's not just blink-on-boot.** Power-cycle the half and watch for a
+   short burst of blinks within the first few seconds — that's the level
+   announce. The LED is *meant* to be dark the rest of the time.
+3. **Test the hardware path independent of firmware.** Touch the resistor end to
+   a 3V3 pad (cathode to GND): if the LED lights, wiring/polarity/joints are
+   good. Polarity: long leg/anode toward the resistor & D2, short leg/cathode to
+   GND.
+4. **Isolate firmware from the battery event.** The blink machinery only runs on
+   a `zmk_battery_state_changed` event. To prove the GPIO path alone, add a
+   temporary boot self-test that blinks on a timer regardless of the battery
+   (used during bring-up, then removed). If the self-test blinks but normal use
+   does not, the issue is battery-event delivery, not the LED.
+5. **The hotkey on the peripheral needs the link.** `&batt_led_show` is processed
+   on the central (left) and relayed to the peripheral (right) over the split
+   link. If the halves aren't connected at that moment, the press won't reach the
+   right LED — though each half's own boot-announce and critical heartbeat still
+   run independently of the link.
 
 ### Original idea
 
