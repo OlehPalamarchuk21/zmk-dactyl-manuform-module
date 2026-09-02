@@ -14,15 +14,15 @@ if DACTYL_BATT_LED
 
 config DACTYL_BATT_LED_LEVEL_HIGH
     int "Battery percentage above which 3 blinks are shown"
-    default 90
+    default 80
 
 config DACTYL_BATT_LED_LEVEL_LOW
     int "Battery percentage above which 2 blinks are shown (at or below = 1 blink)"
-    default 20
+    default 30
 
 config DACTYL_BATT_LED_LEVEL_CRITICAL
     int "Battery percentage at or below which the low-battery heartbeat runs"
-    default 10
+    default 15
 
 config DACTYL_BATT_LED_CRITICAL_INTERVAL_SEC
     int "Seconds between blinks of the critical-battery heartbeat"
@@ -31,5 +31,38 @@ config DACTYL_BATT_LED_CRITICAL_INTERVAL_SEC
 config DACTYL_BATT_LED_BLINK_MS
     int "LED on/off duration per blink half-step, in milliseconds"
     default 200
+
+endif
+
+DT_COMPAT_DACTYL_BATTERY_NCR18650 := dactyl,battery-ncr18650
+
+config DACTYL_BATTERY_CURVE
+    bool "NCR18650B battery sensor (curve-based state of charge)"
+    default $(dt_compat_enabled,$(DT_COMPAT_DACTYL_BATTERY_NCR18650))
+    select ADC
+    depends on SENSOR
+    help
+      Replace ZMK's zmk,battery-nrf-vddh sensor with one that maps the same VDDH
+      reading through a real NCR18650B discharge curve. ZMK's stock conversion is
+      a single straight line from 3450 mV (0%) to 4200 mV (100%), which burns a
+      third of the scale on the first tenth of the cell's capacity and compresses
+      the long 3.9-3.7 V plateau where most of the capacity actually sits.
+
+      Enabled automatically by the `dactyl,battery-ncr18650` node in the shield
+      devicetree; set the chosen `zmk,battery` back to `&vbatt` to go back to
+      ZMK's mapping.
+
+if DACTYL_BATTERY_CURVE
+
+config DACTYL_BATTERY_HOLD_WHILE_CHARGING
+    bool "Hold the last battery level while USB is powered"
+    default y
+    depends on ZMK_USB
+    help
+      While USB is connected the VDDH rail is fed from USB through the input
+      diode, so the sensor reads the rail (well above 4.2 V) and not the cell -
+      every mapping reports 100%. With this enabled the last level measured on
+      battery power is reported instead, and a fresh reading resumes on the first
+      sample after unplugging.
 
 endif

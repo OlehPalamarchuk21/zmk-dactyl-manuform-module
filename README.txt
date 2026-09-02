@@ -61,15 +61,46 @@ MH12210, made in Japan).
 - This is a bare (unprotected) cell — it has no protection PCB. Charging and
   cutoff are handled by the charger on the nRF52840 controller; do not
   short it, over-discharge it, or charge it outside the controller.
+- Charging runs at ~300 mA (the BOOST pad is bridged), so a 3400 mAh cell needs
+  roughly 11 hours from empty. Unplugging earlier leaves it part-charged — and
+  the level shown while USB is connected does not reveal that (see below).
 
 Wiring: cell + to the controller's battery/B+ pad, cell - to GND, on both
 halves. Two cells are needed, one per half; they are never connected to each
 other. See the nice!nano pinout schematic linked above for the battery pads.
 
-Note the charge current of the Supermini nRF52840 is small compared to the
-cell's capacity, so a full charge from empty takes many hours. Item 1 in
-docs/FUTURE-IMPROVEMENTS.md covers adding an in-line ON/OFF switch so a stored
-keyboard does not drain its cells.
+Item 1 in docs/FUTURE-IMPROVEMENTS.md covers adding an in-line ON/OFF switch so
+a stored keyboard does not drain its cells.
+
+
+HOW THE BATTERY PERCENTAGE IS MEASURED
+--------------------------------------
+There is no fuel gauge chip. The level is estimated from the voltage on the
+nRF52840's VDDH rail (SAADC VDDHDIV5), which is the cell when running on
+battery. src/battery_ncr18650.c maps that voltage through an NCR18650B
+discharge curve; both the Windows percentage and the LED blink count come from
+that one number. Roughly:
+
+  4.20 V ~ 100%   4.00 V ~ 80%   3.80 V ~ 55%   3.70 V ~ 40%
+  3.60 V ~  26%   3.50 V ~ 15%   3.20 V ~  0%
+
+0% is placed at 3.20 V, not the cell's 2.5 V cutoff — the cells are unprotected,
+so the firmware calls empty while a safe margin is left.
+
+Two things follow from measuring a voltage rather than counting charge:
+
+- While USB is connected VDDH is the USB rail, not the cell, so the reading is
+  meaningless. The firmware holds the last level measured on battery instead of
+  jumping to 100%; a real reading resumes about a minute after unplugging.
+- The level is an estimate. It moves fastest right after a charge and again at
+  the very bottom, because that is where cell voltage moves fastest.
+
+Stock ZMK converts the same voltage with a single straight line from 3450 mV
+(0%) to 4200 mV (100%). That spends a third of the scale on the first tenth of
+the capacity and squeezes the long 3.9-3.7 V plateau — where most of the
+capacity lives — into ~25 points, which is why the level used to collapse to
+~65% overnight, sit for a month, then fall off a cliff. See item 4 in
+docs/FUTURE-IMPROVEMENTS.md.
 
 
 BATTERY LED
@@ -77,15 +108,15 @@ BATTERY LED
 A green LED on each half blinks its own half's battery level. It stays dark
 otherwise, so idle power draw is ~zero.
 
-- Blink count = level: 3 = >90%, 2 = 20-90%, 1 = <=20%.
+- Blink count = level: 3 = >80%, 2 = 30-80%, 1 = <=30%.
 - Boot: announces the level once on the first battery reading.
-- Critical (<=10%): one blink every 30 s instead of a steady light.
+- Critical (<=15%, ~3.50 V): one blink every 30 s instead of a steady light.
 - On demand: &batt_led_show on the raise layer blinks both halves (the right
   blinks only while the split link is connected).
 
 Hardware: nexus D2 (P0.17), active-high, via 680R to GND, on both controllers.
 Tunables (thresholds, blink timing) live in Kconfig; details and the soldering
-schema are in docs/FUTURE-IMPROVEMENTS.md (section 3).
+schema are in docs/FUTURE-IMPROVEMENTS.md (item 2).
 
 
 DOCS

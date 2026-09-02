@@ -4,6 +4,14 @@
     chosen {
         zmk,kscan = &kscan0;
         zmk,matrix_transform = &default_transform;
+        // Overrides nice_nano_v2.dts, which points zmk,battery at &vbatt
+        // (zmk,battery-nrf-vddh). Same VDDH measurement, NCR18650B curve.
+        zmk,battery = &ncr_batt;
+    };
+
+    ncr_batt: ncr_batt {
+        compatible = "dactyl,battery-ncr18650";
+        status = "okay";
     };
 
     default_transform: keymap_transform_0 {
@@ -44,4 +52,10 @@ RC(3,0) RC(3,1) RC(3,2) RC(3,3) RC(3,4) RC(3,5)                   RC(3,11) RC(3,
             , <&pro_micro 10 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>
             ;
     };
+};
+
+// The stock ZMK battery sensor is replaced by ncr_batt above; leaving it enabled
+// would set up a second reader on the same SAADC channel for nothing.
+&vbatt {
+    status = "disabled";
 };

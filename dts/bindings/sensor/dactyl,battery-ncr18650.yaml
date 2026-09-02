@@ -1,0 +1,6 @@
+description: |
+  Battery state-of-charge monitoring for a Panasonic NCR18650B cell read through
+  the nRF52840 VDDH rail. Same measurement as zmk,battery-nrf-vddh, but mapped
+  through the cell's real discharge curve and held while USB powers the rail.
+
+compatible: "dactyl,battery-ncr18650"
