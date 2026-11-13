@@ -65,4 +65,40 @@ config DACTYL_BATTERY_HOLD_WHILE_CHARGING
       battery power is reported instead, and a fresh reading resumes on the first
       sample after unplugging.
 
+config DACTYL_BATTERY_CUTOFF
+    bool "Soft-off when the cell voltage is too low"
+    default y
+    depends on ZMK_PM_SOFT_OFF && ZMK_BATTERY_REPORTING
+    help
+      Protect the bare (unprotected) 18650 cell from deep discharge. After
+      DACTYL_BATTERY_CUTOFF_SAMPLES samples in a row below
+      DACTYL_BATTERY_CUTOFF_MV on battery power, the board enters ZMK
+      soft-off. A key press does not wake it; plug in USB or press reset.
+      Needs CONFIG_ZMK_PM_SOFT_OFF=y, and ZMK battery reporting, which takes
+      the first sample.
+
+if DACTYL_BATTERY_CUTOFF
+
+config DACTYL_BATTERY_CUTOFF_MV
+    int "Cell voltage (mV) below which the board powers off"
+    default 3300
+    range 2800 4400
+    help
+      3300 mV is about 4% on the NCR18650B curve. Values above 4200 are only
+      useful to test the cutoff with a charged cell.
+
+config DACTYL_BATTERY_CUTOFF_SAMPLES
+    int "Low samples in a row before powering off"
+    default 3
+    range 1 60
+    help
+      The first low sample comes from ZMK battery reporting (at boot, when
+      the keyboard becomes active, and every CONFIG_ZMK_BATTERY_REPORT_INTERVAL
+      while it stays active). The cutoff then takes the remaining samples
+      itself, 5 s apart, so the default of 3 powers off about 10 s after the
+      first low sample. More than one sample protects against a single bad
+      reading.
+
+endif
+
 endif

@@ -14,7 +14,14 @@
 
 #include <zmk/behavior.h>
 
+#include "battery_led.h"
+
 LOG_MODULE_REGISTER(behavior_batt_led, CONFIG_ZMK_LOG_LEVEL);
+
+// Called by battery_cutoff.c before it powers off. Outside the #if below because
+// the cutoff does not depend on this behavior; battery_led.c overrides it on a
+// half with the LED.
+__weak void batt_led_force_off(void) {}
 
 #if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 

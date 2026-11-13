@@ -38,6 +38,8 @@
 #include <zmk/usb.h>
 #endif
 
+#include "battery_cutoff.h"
+
 LOG_MODULE_REGISTER(batt_ncr, CONFIG_ZMK_LOG_LEVEL);
 
 #define VDDHDIV (5)
@@ -146,6 +148,8 @@ static int ncr_sample_fetch(const struct device *dev, enum sensor_channel chan) 
 
     LOG_DBG("vddh %d mV -> %u%%%s", drv_data->millivolts, drv_data->state_of_charge,
             held ? " (held, USB powered)" : "");
+
+    dactyl_battery_cutoff_check(drv_data->millivolts);
 
     return 0;
 }

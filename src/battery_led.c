@@ -11,6 +11,15 @@
  * demand via the `&batt_led_show` keymap behavior (GLOBAL locality, so one
  * keypress drives both halves' LEDs). Between blinks the LED is dark, so idle
  * draw is essentially zero.
+ *
+ * Before the board powers off (ZMK deep sleep, or the low-voltage cutoff in
+ * battery_cutoff.c) the LED is forced off: nRF52 GPIO outputs keep their level
+ * in System OFF, so an LED caught in the middle of a blink would stay lit
+ * (~2 mA) until the next wake.
+ *
+ * The LED is only ever switched on by blink_work, which runs on the system work
+ * queue. Both power-off paths also run on that queue and never return, so after
+ * batt_led_force_off() nothing can switch the LED on again.
  */
 
 #include <zephyr/init.h>
@@ -19,7 +28,10 @@
 #include <zephyr/logging/log.h>
 
 #include <zmk/event_manager.h>
+#include <zmk/events/activity_state_changed.h>
 #include <zmk/events/battery_state_changed.h>
+
+#include "battery_led.h"
 
 LOG_MODULE_REGISTER(batt_led, CONFIG_ZMK_LOG_LEVEL);
 
@@ -121,7 +133,46 @@ void batt_led_show(void) {
     blink(blinks_for(last_soc));
 }
 
+// Stop every blink and switch the LED off, right before the board powers off.
+// Must be called on the system work queue (see the comment at the top).
+// Overrides the weak no-op in behavior_batt_led.c.
+void batt_led_force_off(void) {
+    k_work_cancel_delayable(&critical_work);
+    k_work_cancel_delayable(&blink_work);
+    led_critical = false;
+    half_steps_remaining = 0;
+    led_on = false;
+    gpio_pin_set_dt(&led, 0);
+}
+
+static void on_activity_state(enum zmk_activity_state state) {
+    switch (state) {
+    case ZMK_ACTIVITY_SLEEP:
+        // activity.c raises this on the system work queue right before it
+        // suspends the devices and powers off.
+        batt_led_force_off();
+        break;
+
+    case ZMK_ACTIVITY_ACTIVE:
+        // Restart the critical heartbeat if a failed sleep attempt stopped it.
+        // Does nothing while the heartbeat is running or not needed.
+        if (have_reading) {
+            apply_state(false);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
 static int batt_led_listener(const zmk_event_t *eh) {
+    const struct zmk_activity_state_changed *activity = as_zmk_activity_state_changed(eh);
+    if (activity != NULL) {
+        on_activity_state(activity->state);
+        return 0;
+    }
+
     const struct zmk_battery_state_changed *ev = as_zmk_battery_state_changed(eh);
     if (ev == NULL) {
         return 0;
@@ -137,6 +188,7 @@ static int batt_led_listener(const zmk_event_t *eh) {
 
 ZMK_LISTENER(batt_led, batt_led_listener);
 ZMK_SUBSCRIPTION(batt_led, zmk_battery_state_changed);
+ZMK_SUBSCRIPTION(batt_led, zmk_activity_state_changed);
 
 static int batt_led_init(void) {
     if (!gpio_is_ready_dt(&led)) {

@@ -8,3 +8,4 @@
 target_sources(app PRIVATE src/behavior_batt_led.c)
 target_sources_ifdef(CONFIG_DACTYL_BATT_LED app PRIVATE src/battery_led.c)
 target_sources_ifdef(CONFIG_DACTYL_BATTERY_CURVE app PRIVATE src/battery_ncr18650.c)
+target_sources_ifdef(CONFIG_DACTYL_BATTERY_CUTOFF app PRIVATE src/battery_cutoff.c)
