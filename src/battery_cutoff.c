@@ -74,17 +74,17 @@ static K_WORK_DELAYABLE_DEFINE(confirm_work, confirm_work_handler);
 
 // Runs on the system work queue, like the battery LED work items and the deep
 // sleep in ZMK's activity.c. The LED can only be switched on from this queue,
-// and this handler never returns (except when USB came back, see below), so the
-// LED stays off through System OFF.
+// and once the LED is forced off this handler never returns, so the LED stays
+// off through System OFF.
 static void cutoff_work_handler(struct k_work *work) {
     ARG_UNUSED(work);
 
     // USB plugged in after the last low sample: do not power off. With USB
-    // already present, plugging it in could not wake the board. One more
-    // sample (on USB) resets the count.
+    // already present, plugging it in could not wake the board. The count was
+    // already reset when this work was submitted, so a new cutoff needs a full
+    // set of low samples again.
     if (usb_powered()) {
         LOG_INF("USB powered: cutoff cancelled");
-        k_work_schedule_for_queue(zmk_workqueue_lowprio_work_q(), &confirm_work, K_NO_WAIT);
         return;
     }
 
@@ -124,6 +124,9 @@ void dactyl_battery_cutoff_check(uint16_t millivolts) {
             millivolts);
 
     if (low_samples >= CONFIG_DACTYL_BATTERY_CUTOFF_SAMPLES) {
+        // Reset here, on this queue: if the cutoff is cancelled because USB
+        // came back, the next cutoff must again need a full set of samples.
+        low_samples = 0;
         k_work_cancel_delayable(&confirm_work);
         // The ADC read for this sample is already complete, so soft-off may
         // suspend the ADC at once.

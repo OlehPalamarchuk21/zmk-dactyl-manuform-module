@@ -18,8 +18,10 @@
  * (~2 mA) until the next wake.
  *
  * The LED is only ever switched on by blink_work, which runs on the system work
- * queue. Both power-off paths also run on that queue and never return, so after
- * batt_led_force_off() nothing can switch the LED on again.
+ * queue. Both power-off paths also run on that queue and, once they have forced
+ * the LED off, do not return when the power-off works, so nothing can switch
+ * the LED on again. If a deep-sleep attempt fails, activity.c does return; the
+ * next ACTIVE event then restarts the critical heartbeat if it is needed.
  */
 
 #include <zephyr/init.h>
